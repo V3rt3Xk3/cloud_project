@@ -31,9 +31,9 @@ resource "kubernetes_secret" "mongo_auth" {
 
   data = {
     connection = azurerm_cosmosdb_account.cosmos_account.primary_mongodb_connection_string
-
-    type = "Opaque"
   }
+
+  type = "Opaque"
 }
 
 resource "azurerm_cosmosdb_mongo_database" "mongodb" {

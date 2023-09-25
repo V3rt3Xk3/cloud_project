@@ -1,37 +1,62 @@
-resource "kubernetes_ingress" "example_ingress" {
+resource "kubernetes_ingress_v1" "cloud_ingress" {
   metadata {
-    name = "cloud-ingress"
+    labels = {
+      app = "ingress-nginx"
+    }
+    name      = "cloud-ingress"
+    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
+    annotations = {
+      "kubernetes.io/ingress.class" : "nginx"
+    }
   }
 
   spec {
-    backend {
-      service_name = kubernetes_service.frontend_service.metadata.0.name
-      service_port = 80
+    ingress_class_name = "nginx"
+    default_backend {
+      service {
+        name = "frontend-service"
+        port {
+          number = 80
+        }
+      }
     }
 
     rule {
       http {
         path {
+          path      = "/api/*"
+          path_type = "Prefix"
           backend {
-            service_name = kubernetes_service.backend_service.metadata.0.name
-            service_port = 5000
+            service {
+              name = "backend-service"
+              port {
+                number = 5000
+              }
+            }
           }
-
-          path = "/api/*"
         }
 
         path {
+          path      = "/*"
+          path_type = "Prefix"
           backend {
-            service_name = kubernetes_service.frontend_service.metadata.0.name
-            service_port = 80
+            service {
+              name = "frontend-service"
+              port {
+                number = 80
+              }
+            }
           }
-
-          path = "/*"
         }
       }
     }
   }
+  depends_on = [
+    helm_release.ingress_nginx
+  ]
 }
+
+
 
 ##########################
 ### Backend deployment ###
@@ -39,7 +64,8 @@ resource "kubernetes_ingress" "example_ingress" {
 
 resource "kubernetes_deployment" "backend" {
   metadata {
-    name = "backend-deployment"
+    name      = "backend-deployment"
+    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
   }
 
   spec {
@@ -73,6 +99,10 @@ resource "kubernetes_deployment" "backend" {
               }
             }
           }
+          env {
+            name  = "CORS_URL"
+            value = kubernetes_ingress_v1.cloud_ingress.status.0.load_balancer.0.ingress.0.hostname
+          }
         }
         image_pull_secrets {
           name = kubernetes_secret.docker_credentials.metadata[0].name
@@ -82,13 +112,16 @@ resource "kubernetes_deployment" "backend" {
     }
   }
   depends_on = [
-    kubernetes_secret.mongo_auth
+    kubernetes_secret.mongo_auth,
+    kubernetes_ingress_v1.cloud_ingress,
+    azurerm_kubernetes_cluster.CloudKubernetesCluster
   ]
 }
 
 resource "kubernetes_service" "backend_service" {
   metadata {
-    name = "backend-service"
+    name      = "backend-service"
+    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
   }
   spec {
     selector = {
@@ -127,7 +160,8 @@ resource "kubernetes_horizontal_pod_autoscaler" "backend_scaler" {
 
 resource "kubernetes_deployment" "frontend" {
   metadata {
-    name = "frontend-deployment"
+    name      = "frontend-deployment"
+    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
   }
 
   spec {
@@ -151,6 +185,10 @@ resource "kubernetes_deployment" "frontend" {
           image = "v3rt1ke/mindentudoter:frontend"
           name  = "frontend"
 
+          env {
+            name  = "VITE_BACKEND_URL"
+            value = kubernetes_ingress_v1.cloud_ingress.status.0.load_balancer.0.ingress.0.hostname
+          }
         }
         image_pull_secrets {
           name = kubernetes_secret.docker_credentials.metadata[0].name
@@ -158,11 +196,16 @@ resource "kubernetes_deployment" "frontend" {
       }
     }
   }
+  depends_on = [
+    kubernetes_ingress_v1.cloud_ingress,
+    azurerm_kubernetes_cluster.CloudKubernetesCluster
+  ]
 }
 
 resource "kubernetes_service" "frontend_service" {
   metadata {
-    name = "frontend-service"
+    name      = "frontend-service"
+    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
   }
   spec {
     selector = {
@@ -192,4 +235,9 @@ resource "kubernetes_horizontal_pod_autoscaler" "frontend_scaler" {
     max_replicas                      = 10
     target_cpu_utilization_percentage = 50
   }
+}
+
+output "ingress_hostname" {
+  value     = kubernetes_ingress_v1.cloud_ingress.status.0.load_balancer.0.ingress.0.hostname
+  sensitive = true
 }
