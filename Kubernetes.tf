@@ -1,26 +1,13 @@
 resource "kubernetes_ingress_v1" "cloud_ingress" {
+  wait_for_load_balancer = true
   metadata {
-    labels = {
-      app = "ingress-nginx"
-    }
     name      = "cloud-ingress"
     namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
     annotations = {
-      "kubernetes.io/ingress.class" : "nginx"
+      "kubernetes.io/ingress.class" = "addon-http-application-routing"
     }
   }
-
   spec {
-    ingress_class_name = "nginx"
-    default_backend {
-      service {
-        name = "frontend-service"
-        port {
-          number = 80
-        }
-      }
-    }
-
     rule {
       http {
         path {
@@ -30,15 +17,14 @@ resource "kubernetes_ingress_v1" "cloud_ingress" {
             service {
               name = "backend-service"
               port {
-                number = 5000
+                number = 80
               }
             }
           }
         }
 
         path {
-          path      = "/*"
-          path_type = "Prefix"
+          path = "/*"
           backend {
             service {
               name = "frontend-service"
@@ -52,7 +38,7 @@ resource "kubernetes_ingress_v1" "cloud_ingress" {
     }
   }
   depends_on = [
-    helm_release.ingress_nginx
+    helm_release.nginix_ingress
   ]
 }
 
@@ -101,7 +87,7 @@ resource "kubernetes_deployment" "backend" {
           }
           env {
             name  = "CORS_URL"
-            value = kubernetes_ingress_v1.cloud_ingress.status.0.load_balancer.0.ingress.0.hostname
+            value = kubernetes_ingress_v1.cloud_ingress.status.0.load_balancer.0.ingress.0.ip
           }
         }
         image_pull_secrets {
@@ -114,6 +100,7 @@ resource "kubernetes_deployment" "backend" {
   depends_on = [
     kubernetes_secret.mongo_auth,
     kubernetes_ingress_v1.cloud_ingress,
+    kubernetes_secret.docker_credentials,
     azurerm_kubernetes_cluster.CloudKubernetesCluster
   ]
 }
@@ -130,16 +117,17 @@ resource "kubernetes_service" "backend_service" {
     session_affinity = "ClientIP"
     port {
       port        = 80
-      target_port = 5000
+      target_port = 80
     }
 
-    type = "LoadBalancer"
+    type = "ClusterIP"
   }
 }
 
 resource "kubernetes_horizontal_pod_autoscaler" "backend_scaler" {
   metadata {
-    name = "backend-scaler"
+    name      = "backend-scaler"
+    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
   }
   spec {
     scale_target_ref {
@@ -187,7 +175,7 @@ resource "kubernetes_deployment" "frontend" {
 
           env {
             name  = "VITE_BACKEND_URL"
-            value = kubernetes_ingress_v1.cloud_ingress.status.0.load_balancer.0.ingress.0.hostname
+            value = "http://${kubernetes_ingress_v1.cloud_ingress.status.0.load_balancer.0.ingress.0.ip}"
           }
         }
         image_pull_secrets {
@@ -197,6 +185,7 @@ resource "kubernetes_deployment" "frontend" {
     }
   }
   depends_on = [
+    kubernetes_secret.docker_credentials,
     kubernetes_ingress_v1.cloud_ingress,
     azurerm_kubernetes_cluster.CloudKubernetesCluster
   ]
@@ -217,13 +206,14 @@ resource "kubernetes_service" "frontend_service" {
       target_port = 80
     }
 
-    type = "LoadBalancer"
+    type = "ClusterIP"
   }
 }
 
 resource "kubernetes_horizontal_pod_autoscaler" "frontend_scaler" {
   metadata {
-    name = "frontend-scaler"
+    name      = "frontend-scaler"
+    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
   }
   spec {
     scale_target_ref {
@@ -238,6 +228,6 @@ resource "kubernetes_horizontal_pod_autoscaler" "frontend_scaler" {
 }
 
 output "ingress_hostname" {
-  value     = kubernetes_ingress_v1.cloud_ingress.status.0.load_balancer.0.ingress.0.hostname
+  value     = kubernetes_ingress_v1.cloud_ingress.status.0.load_balancer.0.ingress.0.ip
   sensitive = true
 }

@@ -12,6 +12,7 @@ variable "docker_password" {
 variable "docker_server" {
   description = "Docker server"
   type        = string
+
 }
 
 variable "docker_email" {
@@ -21,14 +22,15 @@ variable "docker_email" {
 
 resource "kubernetes_secret" "docker_credentials" {
   metadata {
-    name = "docker-cfg"
+    name      = "docker-cfg"
+    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
   }
 
   type = "kubernetes.io/dockerconfigjson"
 
   data = {
     ".dockerconfigjson" = jsonencode({
-      auths = {
+      "auths" = {
         "${var.docker_server}" = {
           "username" = var.docker_username
           "password" = var.docker_password

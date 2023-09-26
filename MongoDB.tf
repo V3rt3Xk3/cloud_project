@@ -26,7 +26,8 @@ resource "azurerm_cosmosdb_account" "cosmos_account" {
 
 resource "kubernetes_secret" "mongo_auth" {
   metadata {
-    name = "mongo-auth"
+    name      = "mongo-auth"
+    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
   }
 
   data = {

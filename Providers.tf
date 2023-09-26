@@ -13,6 +13,22 @@ terraform {
   }
 }
 
+provider "helm" {
+  kubernetes {
+    host                   = azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.host
+    client_certificate     = base64decode(azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.client_certificate)
+    client_key             = base64decode(azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.client_key)
+    cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.cluster_ca_certificate)
+  }
+}
+
+resource "helm_release" "nginix_ingress" {
+  name       = "nginx-ingress"
+  repository = "https://charts.bitnami.com/bitnami"
+  chart      = "nginx"
+  namespace  = "kube-system"
+}
+
 
 # Configure the Microsoft Azure Provider
 provider "azurerm" {
@@ -42,42 +58,6 @@ resource "kubernetes_namespace" "cloud_namespace" {
   }
 }
 
-provider "helm" {
-  kubernetes {
-    host                   = azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.host
-    client_certificate     = base64decode(azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.client_certificate)
-    client_key             = base64decode(azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.client_key)
-    cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.cluster_ca_certificate)
-  }
-}
-
-resource "helm_release" "ingress_nginx" {
-  name       = "ingress-nginx"
-  repository = "https://kubernetes.github.io/ingress-nginx"
-  chart      = "ingress-nginx"
-  version    = "4.3.0"
-  namespace  = kubernetes_namespace.cloud_namespace.metadata.0.name
-  timeout    = 300
-
-  values = [<<EOF
-controller:
-  admissionWebhooks:
-    enabled: false
-  electionID: ingress-controller-leader-internal
-  ingressClass: nginx
-  podLabels:
-    app: ingress-nginx
-  service:
-    annotations:
-      service.beta.kubernetes.io/aws-load-balancer-type: nlb
-  scope:
-    enabled: true
-rbac:
-  scope: true
-EOF
-  ]
-}
-
 resource "azurerm_resource_group" "CloudProject" {
   name     = "CloudProject"
   location = "West Europe"
@@ -104,7 +84,11 @@ resource "azurerm_kubernetes_cluster" "CloudKubernetesCluster" {
   tags = {
     Environment = "Production"
   }
+
+  http_application_routing_enabled = true
 }
+
+
 
 output "kubernetes_client_certificate" {
   value     = azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.client_certificate
