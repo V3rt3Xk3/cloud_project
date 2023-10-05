@@ -27,7 +27,7 @@ resource "azurerm_cosmosdb_account" "cosmos_account" {
 resource "kubernetes_secret" "mongo_auth" {
   metadata {
     name      = "mongo-auth"
-    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
+    namespace = "kube-system"
   }
 
   data = {
@@ -50,8 +50,8 @@ resource "azurerm_cosmosdb_mongo_collection" "Users" {
   account_name        = azurerm_cosmosdb_account.cosmos_account.name
   database_name       = azurerm_cosmosdb_mongo_database.mongodb.name
 
-  default_ttl_seconds = "777"
-  shard_key           = "uniqueKey"
+  default_ttl_seconds = "-1"
+  shard_key           = "_id"
   throughput          = 400
 
   index {
@@ -66,8 +66,8 @@ resource "azurerm_cosmosdb_mongo_collection" "BlogPosts" {
   account_name        = azurerm_cosmosdb_account.cosmos_account.name
   database_name       = azurerm_cosmosdb_mongo_database.mongodb.name
 
-  default_ttl_seconds = "777"
-  shard_key           = "uniqueKey"
+  default_ttl_seconds = "-1"
+  shard_key           = "_id"
   throughput          = 400
 
   index {

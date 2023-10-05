@@ -23,7 +23,7 @@ variable "docker_email" {
 resource "kubernetes_secret" "docker_credentials" {
   metadata {
     name      = "docker-cfg"
-    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
+    namespace = "kube-system"
   }
 
   type = "kubernetes.io/dockerconfigjson"

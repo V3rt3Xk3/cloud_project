@@ -2,16 +2,25 @@ resource "kubernetes_ingress_v1" "cloud_ingress" {
   wait_for_load_balancer = true
   metadata {
     name      = "cloud-ingress"
-    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
+    namespace = "kube-system"
     annotations = {
       "kubernetes.io/ingress.class" = "addon-http-application-routing"
     }
   }
   spec {
+    default_backend {
+      service {
+        name = "frontend-service"
+        port {
+          number = 80
+        }
+      }
+    }
+
     rule {
       http {
         path {
-          path      = "/api/*"
+          path      = "/api/"
           path_type = "Prefix"
           backend {
             service {
@@ -22,9 +31,9 @@ resource "kubernetes_ingress_v1" "cloud_ingress" {
             }
           }
         }
-
         path {
-          path = "/*"
+          path      = "/"
+          path_type = "Prefix"
           backend {
             service {
               name = "frontend-service"
@@ -37,9 +46,6 @@ resource "kubernetes_ingress_v1" "cloud_ingress" {
       }
     }
   }
-  depends_on = [
-    helm_release.nginix_ingress
-  ]
 }
 
 
@@ -51,11 +57,10 @@ resource "kubernetes_ingress_v1" "cloud_ingress" {
 resource "kubernetes_deployment" "backend" {
   metadata {
     name      = "backend-deployment"
-    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
+    namespace = "kube-system"
   }
 
   spec {
-    replicas = 3
 
     selector {
       match_labels = {
@@ -72,8 +77,9 @@ resource "kubernetes_deployment" "backend" {
 
       spec {
         container {
-          image = "v3rt1ke/mindentudoter:backend"
-          name  = "backend"
+          image_pull_policy = "Always"
+          image             = "v3rt1ke/mindentudoter:backendX"
+          name              = "backend"
 
           env {
             name = "COSMOSDB_MONGO_CONNECTIONSTRING"
@@ -88,6 +94,17 @@ resource "kubernetes_deployment" "backend" {
           env {
             name  = "CORS_URL"
             value = kubernetes_ingress_v1.cloud_ingress.status.0.load_balancer.0.ingress.0.ip
+          }
+
+          resources {
+            limits = {
+              cpu    = "0.5"
+              memory = "1024Mi"
+            }
+            requests = {
+              cpu    = "0.25"
+              memory = "512Mi"
+            }
           }
         }
         image_pull_secrets {
@@ -108,7 +125,7 @@ resource "kubernetes_deployment" "backend" {
 resource "kubernetes_service" "backend_service" {
   metadata {
     name      = "backend-service"
-    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
+    namespace = "kube-system"
   }
   spec {
     selector = {
@@ -127,7 +144,7 @@ resource "kubernetes_service" "backend_service" {
 resource "kubernetes_horizontal_pod_autoscaler" "backend_scaler" {
   metadata {
     name      = "backend-scaler"
-    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
+    namespace = "kube-system"
   }
   spec {
     scale_target_ref {
@@ -135,8 +152,8 @@ resource "kubernetes_horizontal_pod_autoscaler" "backend_scaler" {
       kind        = "Deployment"
       name        = kubernetes_deployment.backend.metadata.0.name
     }
-    min_replicas                      = 2
-    max_replicas                      = 10
+    min_replicas                      = 1
+    max_replicas                      = 1
     target_cpu_utilization_percentage = 50
 
   }
@@ -149,11 +166,10 @@ resource "kubernetes_horizontal_pod_autoscaler" "backend_scaler" {
 resource "kubernetes_deployment" "frontend" {
   metadata {
     name      = "frontend-deployment"
-    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
+    namespace = "kube-system"
   }
 
   spec {
-    replicas = 3
 
     selector {
       match_labels = {
@@ -170,8 +186,9 @@ resource "kubernetes_deployment" "frontend" {
 
       spec {
         container {
-          image = "v3rt1ke/mindentudoter:frontend"
-          name  = "frontend"
+          image_pull_policy = "Always"
+          image             = "v3rt1ke/mindentudoter:frontend"
+          name              = "frontend"
 
           env {
             name  = "VITE_BACKEND_URL"
@@ -194,7 +211,7 @@ resource "kubernetes_deployment" "frontend" {
 resource "kubernetes_service" "frontend_service" {
   metadata {
     name      = "frontend-service"
-    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
+    namespace = "kube-system"
   }
   spec {
     selector = {
@@ -213,7 +230,7 @@ resource "kubernetes_service" "frontend_service" {
 resource "kubernetes_horizontal_pod_autoscaler" "frontend_scaler" {
   metadata {
     name      = "frontend-scaler"
-    namespace = kubernetes_namespace.cloud_namespace.metadata.0.name
+    namespace = "kube-system"
   }
   spec {
     scale_target_ref {

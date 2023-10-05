@@ -6,27 +6,11 @@ terraform {
     kubernetes = {
       source = "hashicorp/kubernetes"
     }
-    helm = {
-      source  = "hashicorp/helm"
-      version = "2.11.0"
+    http = {
+      source  = "hashicorp/http"
+      version = "3.4.0"
     }
   }
-}
-
-provider "helm" {
-  kubernetes {
-    host                   = azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.host
-    client_certificate     = base64decode(azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.client_certificate)
-    client_key             = base64decode(azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.client_key)
-    cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.cluster_ca_certificate)
-  }
-}
-
-resource "helm_release" "nginix_ingress" {
-  name       = "nginx-ingress"
-  repository = "https://charts.bitnami.com/bitnami"
-  chart      = "nginx"
-  namespace  = "kube-system"
 }
 
 
@@ -47,15 +31,6 @@ provider "kubernetes" {
   client_certificate     = base64decode(azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.client_certificate)
   client_key             = base64decode(azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.client_key)
   cluster_ca_certificate = base64decode(azurerm_kubernetes_cluster.CloudKubernetesCluster.kube_config.0.cluster_ca_certificate)
-}
-
-resource "kubernetes_namespace" "cloud_namespace" {
-  metadata {
-    labels = {
-      app = "cloud"
-    }
-    name = "cloud"
-  }
 }
 
 resource "azurerm_resource_group" "CloudProject" {
